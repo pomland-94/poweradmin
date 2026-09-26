@@ -48,7 +48,7 @@
     <div class="collapse show" id="dns-management">
         <div class="card-body py-2 px-2">
             <div class="row row-cols-3 row-cols-sm-4 row-cols-md-5 row-cols-lg-6 row-cols-xl-7 row-cols-xxl-8 g-1">
-                {% if permissions['user_is_ueberuser'] and pdns_api_enabled and show_pdns_status %}
+                {% if permissions['server_status_view'] and pdns_api_enabled and show_pdns_status %}
                 <div class="col card-item">
                     <a href="{{ base_url_prefix }}/tools/pdns-status" class="card h-100 text-decoration-none text-body {% if pdns_server_status is defined %}{% if pdns_server_status.running %}border-success{% else %}border-danger{% endif %}{% endif %}" data-testid="pdns-status-link">
                         <div class="card-body text-center py-2 px-1">

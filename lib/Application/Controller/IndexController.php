@@ -92,14 +92,15 @@ class IndexController extends BaseController
             'user_edit_others',
             'user_add_new',
             'api_manage_keys',
+            'server_status_view',
         ]);
 
-        // Check PowerDNS server status if API is enabled and user is admin
+        // Check PowerDNS server status if API is enabled and user can view it
         $pdnsServerStatus = null;
         $pdnsApiEnabled = !empty($this->config->get('pdns_api', 'url', '')) && !empty($this->config->get('pdns_api', 'key', ''));
         $showPdnsStatus = $this->config->get('interface', 'show_pdns_status', false);
 
-        if ($pdnsApiEnabled && $showPdnsStatus && $permissions['user_is_ueberuser']) {
+        if ($pdnsApiEnabled && $showPdnsStatus && $permissions['server_status_view']) {
             $statusService = new PowerdnsStatusService();
             $serverStatus = $statusService->getServerStatus();
             $pdnsServerStatus = [
@@ -146,7 +147,7 @@ class IndexController extends BaseController
         $enableConsistencyChecks = $this->config->get('interface', 'enable_consistency_checks', false);
         $moduleNavItems = $this->getModuleNavItemsForDashboard();
 
-        $hasDnsManagement = ($permissions['user_is_ueberuser'] && $pdnsApiEnabled && $showPdnsStatus)
+        $hasDnsManagement = ($permissions['server_status_view'] && $pdnsApiEnabled && $showPdnsStatus)
             || $permissions['search']
             || $permissions['zone_content_view_own'] || $permissions['zone_content_view_others']
             || $permissions['zone_templ_add'] || $permissions['zone_templ_edit']

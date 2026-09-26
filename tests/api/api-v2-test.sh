@@ -1952,6 +1952,9 @@ TEST_CRUD_USER_ID=""
 test_server_status() {
     print_section "Server Status API Tests"
 
+    api_request_v2 "POST" "/server/status" "" 405 "POST on server status returns 405"
+    test_server_status_access
+
     # 501 means the PowerDNS API is not configured; the live checks need it.
     local probe_code
     probe_code=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -1975,6 +1978,41 @@ test_server_status() {
 
     api_request_v2 "GET" "/server/status?include=slaves" "" 200 "Get server status including slaves"
     assert_json "Slaves are an array when requested" "$LAST_RESPONSE_BODY" '.data.slaves | type' "array"
+}
+
+# Access checks run before the PowerDNS API check, so they need no live PowerDNS.
+test_server_status_access() {
+    local mgr_id
+    if ! mgr_id=$(db_exec "SELECT id FROM users WHERE username='manager' LIMIT 1;" 2>/dev/null) || [[ -z "$mgr_id" ]]; then
+        print_info "Database access not available - skipping server status access tests"
+        return 0
+    fi
+    mgr_id=$(echo "$mgr_id" | tr -d '[:space:]')
+    local owner_id
+    owner_id=$(db_exec "SELECT id FROM users WHERE username='admin' LIMIT 1;" 2>/dev/null | tr -d '[:space:]')
+
+    local mgr_secret="statustest-manager-key-aaaaaaaaaaaa"
+    local zone_secret="statustest-zone-key-bbbbbbbbbbbb"
+    db_exec "DELETE FROM api_keys WHERE name IN ('statustest-mgr','statustest-zone');" >/dev/null 2>&1 || true
+    db_exec "INSERT INTO api_keys (name, secret_key, created_by) VALUES ('statustest-mgr', '$(hash_api_key "$mgr_secret")', ${mgr_id});" >/dev/null 2>&1
+    db_exec "INSERT INTO api_keys (name, secret_key, created_by) VALUES ('statustest-zone', '$(hash_api_key "$zone_secret")', ${owner_id});" >/dev/null 2>&1
+
+    # The default manager template does not include server_status_view.
+    api_request_v2_with_key "$mgr_secret" "GET" "/server/status" "" 403 "User without server_status_view gets 403"
+
+    local zone_id="" zone_key_id
+    if api_request_v2 "POST" "/zones" '{"name":"status-scope.example.com","type":"MASTER"}' 201 "Create zone for the zone-scoped key"; then
+        zone_id=$(extract_json_field "$LAST_RESPONSE_BODY" "zone_id")
+    fi
+    zone_key_id=$(db_exec "SELECT id FROM api_keys WHERE name='statustest-zone' LIMIT 1;" 2>/dev/null | tr -d '[:space:]')
+    if [[ -n "$zone_key_id" && -n "$zone_id" ]]; then
+        db_exec "INSERT INTO api_key_zones (api_key_id, zone_id) VALUES (${zone_key_id}, ${zone_id});" >/dev/null 2>&1
+        api_request_v2_with_key "$zone_secret" "GET" "/server/status" "" 403 "Zone-scoped admin key gets 403"
+    fi
+
+    db_exec "DELETE FROM api_key_zones WHERE api_key_id IN (SELECT id FROM api_keys WHERE name IN ('statustest-mgr','statustest-zone'));" >/dev/null 2>&1 || true
+    db_exec "DELETE FROM api_keys WHERE name IN ('statustest-mgr','statustest-zone');" >/dev/null 2>&1 || true
+    [[ -n "$zone_id" ]] && api_request_v2 "DELETE" "/zones/${zone_id}" "" 204 "Cleanup zone-scoped test zone" || true
 }
 
 test_users_crud() {

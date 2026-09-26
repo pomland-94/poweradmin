@@ -83,7 +83,7 @@ class ServerStatusController extends PublicApiController
             ),
             new OA\Parameter(
                 name: 'include',
-                description: 'Set to "slaves" to also probe the configured autoprimary (supermaster) servers. This is slower.',
+                description: 'Set to "slaves" to also probe the configured autoprimary (supermaster) servers. Requires supermaster_view. This is slower.',
                 in: 'query',
                 required: false,
                 schema: new OA\Schema(type: 'string', enum: ['slaves'])
@@ -133,7 +133,7 @@ class ServerStatusController extends PublicApiController
         )
     )]
     #[OA\Response(response: 401, description: 'Unauthorized')]
-    #[OA\Response(response: 403, description: 'Forbidden - missing server_status_view permission, or the API key is restricted to specific zones')]
+    #[OA\Response(response: 403, description: 'Forbidden - missing server_status_view permission, include=slaves without supermaster_view, or the API key is restricted to specific zones')]
     #[OA\Response(response: 501, description: 'The PowerDNS API is not configured')]
     #[OA\Response(response: 503, description: 'The PowerDNS server is not reachable')]
     protected function getStatus(): JsonResponse
@@ -145,6 +145,11 @@ class ServerStatusController extends PublicApiController
 
         if (!$this->canViewServerStatus()) {
             return $this->returnApiError('You do not have permission to view the PowerDNS server status', 403);
+        }
+
+        $includeSlaves = $this->request->query->get('include') === 'slaves';
+        if ($includeSlaves && !$this->canViewAutoprimaries()) {
+            return $this->returnApiError('You do not have permission to view the autoprimary servers', 403);
         }
 
         if (!$this->statusService->isApiEnabled()) {
@@ -175,7 +180,7 @@ class ServerStatusController extends PublicApiController
             'metrics' => $this->filterMetrics($status['metrics'] ?? []),
         ];
 
-        if ($this->request->query->get('include') === 'slaves') {
+        if ($includeSlaves) {
             $data['slaves'] = $this->getSlaveStatus();
         }
 
@@ -191,6 +196,17 @@ class ServerStatusController extends PublicApiController
 
         return $this->apiPermissionService->userHasPermission($userId, 'user_is_ueberuser')
             || $this->apiPermissionService->userHasPermission($userId, 'server_status_view');
+    }
+
+    /**
+     * The autoprimary list is supermaster data, so it follows supermaster_view.
+     */
+    private function canViewAutoprimaries(): bool
+    {
+        $userId = $this->authenticatedUserId;
+
+        return $this->apiPermissionService->userHasPermission($userId, 'user_is_ueberuser')
+            || $this->apiPermissionService->userHasPermission($userId, 'supermaster_view');
     }
 
     /**

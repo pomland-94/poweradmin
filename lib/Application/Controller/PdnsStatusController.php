@@ -81,9 +81,9 @@ class PdnsStatusController extends BaseController
     {
         $serverStatus = $this->statusService->getServerStatus();
 
-        // Get slave servers if any
+        // The autoprimary list is supermaster data, so it follows supermaster_view
         $slaveStatus = [];
-        $slaveServers = $this->supermasterManager->getSlaveServerIPs();
+        $slaveServers = $this->hasPermission('supermaster_view') ? $this->supermasterManager->getSlaveServerIPs() : [];
         if (!empty($slaveServers)) {
             $slaveStatus = $this->statusService->checkSlaveServerStatus($slaveServers);
         }

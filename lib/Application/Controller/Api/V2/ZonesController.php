@@ -33,6 +33,8 @@ namespace Poweradmin\Application\Controller\Api\V2;
 
 use Poweradmin\Application\Controller\Api\PublicApiController;
 use Poweradmin\Application\Service\DnsBackendProviderFactory;
+use InvalidArgumentException;
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Domain\Model\MetadataDefinitions;
 use Poweradmin\Domain\Service\ApiPermissionService;
 use Poweradmin\Domain\Repository\ZoneRepositoryInterface;
@@ -48,6 +50,9 @@ use Poweradmin\Domain\Enum\ZoneKind;
 
 class ZonesController extends PublicApiController
 {
+    /** Fields accepted by the `sort` parameter of GET /zones. */
+    private const ZONE_SORT_FIELDS = ['name', 'type'];
+
     private ZoneRepositoryInterface $zoneRepository;
     private ZoneManagementService $zoneManagementService;
     private ApiPermissionService $permissionService;
@@ -124,6 +129,21 @@ class ZonesController extends PublicApiController
         required: false,
         schema: new OA\Schema(type: 'string', example: 'example.com')
     )]
+    #[OA\Parameter(
+        name: 'q',
+        description: 'Case-insensitive substring filter on the zone name',
+        in: 'query',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'example')
+    )]
+    #[OA\Parameter(
+        name: 'sort',
+        description: 'Sort order: comma-separated fields, each optionally suffixed with :asc or :desc. Allowed fields: name, type. Default: name',
+        in: 'query',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'type,name:desc')
+    )]
+    #[OA\Response(response: 400, description: 'Invalid sort parameter')]
     #[OA\Response(
         response: 200,
         description: 'Zones retrieved successfully',
@@ -168,8 +188,14 @@ class ZonesController extends PublicApiController
         try {
             $userId = $this->getAuthenticatedUserId();
 
-            // Get filter parameters
+            // Get filter and sort parameters
             $nameFilter = $this->request->query->get('name');
+            $nameContains = $this->request->query->get('q');
+            try {
+                $sort = ListSort::fromQuery($this->request->query->get('sort'), self::ZONE_SORT_FIELDS);
+            } catch (InvalidArgumentException $e) {
+                return $this->returnApiError($e->getMessage(), 400);
+            }
 
             // Get pagination parameters (defaults to returning all zones like PowerDNS and PowerDNS-Admin)
             $perPage = (int)$this->request->query->get('per_page', 0);
@@ -191,7 +217,7 @@ class ZonesController extends PublicApiController
             }
 
             // Get total count for metadata (permission-filtered and name-filtered)
-            $totalCount = $this->zoneRepository->getZoneCountFiltered($visibleZoneIds, $filterUserId, $nameFilter);
+            $totalCount = $this->zoneRepository->getZoneCountFiltered($visibleZoneIds, $filterUserId, $nameFilter, $nameContains);
 
             // If user has no view permissions or name filter matches nothing, return empty result immediately
             if ($totalCount === 0) {
@@ -208,7 +234,7 @@ class ZonesController extends PublicApiController
 
             // If per_page is 0 or not specified, return all zones (compatible with PowerDNS/PowerDNS-Admin)
             if ($perPage === 0) {
-                $zones = $this->zoneRepository->getAllZonesFiltered($visibleZoneIds, $filterUserId, $nameFilter);
+                $zones = $this->zoneRepository->getAllZonesFiltered($visibleZoneIds, $filterUserId, $nameFilter, null, null, $nameContains, $sort);
                 $page = 1;
                 $lastPage = 1;
             } else {
@@ -217,7 +243,7 @@ class ZonesController extends PublicApiController
                 $perPage = min(10000, max(1, $perPage)); // Allow up to 10k per page
                 $offset = ($page - 1) * $perPage;
 
-                $zones = $this->zoneRepository->getAllZonesFiltered($visibleZoneIds, $filterUserId, $nameFilter, $offset, $perPage);
+                $zones = $this->zoneRepository->getAllZonesFiltered($visibleZoneIds, $filterUserId, $nameFilter, $offset, $perPage, $nameContains, $sort);
                 $lastPage = (int)ceil($totalCount / $perPage);
             }
 

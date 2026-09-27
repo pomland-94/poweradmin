@@ -22,6 +22,7 @@
 
 namespace Poweradmin\Domain\Repository;
 
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Domain\Model\User;
 use Poweradmin\Domain\Model\UserId;
 
@@ -106,9 +107,11 @@ interface UserRepository
      *
      * @param int $offset Starting offset for pagination
      * @param int $limit Maximum number of users to return
+     * @param string|null $search Filter on username, full name, email or description
+     * @param ListSort|null $sort Optional sort order (fields: username, fullname, email); defaults to id
      * @return array Array of user data with zone counts
      */
-    public function getUsersList(int $offset, int $limit): array;
+    public function getUsersList(int $offset, int $limit, ?string $search = null, ?ListSort $sort = null): array;
 
     /**
      * Get all users with the number of zones each one owns

@@ -31,6 +31,8 @@
 
 namespace Poweradmin\Application\Controller\Api\V2;
 
+use InvalidArgumentException;
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Application\Controller\Api\PublicApiController;
 use Poweradmin\Application\Service\GroupMembershipService;
 use Poweradmin\Domain\Model\Pagination;
@@ -73,6 +75,9 @@ use OpenApi\Attributes as OA;
 
 class UsersController extends PublicApiController
 {
+    /** Fields accepted by the `sort` parameter of GET /users. */
+    private const USER_SORT_FIELDS = ['username', 'fullname', 'email'];
+
     /** Guards against a single request fanning out into thousands of membership queries. */
     private const MAX_GROUPS_PER_REQUEST = 50;
 
@@ -301,6 +306,21 @@ class UsersController extends PublicApiController
         required: false,
         schema: new OA\Schema(type: 'string')
     )]
+    #[OA\Parameter(
+        name: 'q',
+        description: 'Case-insensitive substring filter on username, full name, email or description',
+        in: 'query',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'admin')
+    )]
+    #[OA\Parameter(
+        name: 'sort',
+        description: 'Sort order: comma-separated fields, each optionally suffixed with :asc or :desc. Allowed fields: username, fullname, email. Default: user ID',
+        in: 'query',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'username')
+    )]
+    #[OA\Response(response: 400, description: 'Invalid sort parameter')]
     #[OA\Response(
         response: 200,
         description: 'Users retrieved successfully',
@@ -387,6 +407,13 @@ class UsersController extends PublicApiController
                 return $this->returnApiResponse(['users' => $users], true, 'Users retrieved successfully', 200);
             }
 
+            $search = $this->request->query->get('q');
+            try {
+                $sort = ListSort::fromQuery($this->request->query->get('sort'), self::USER_SORT_FIELDS);
+            } catch (InvalidArgumentException $e) {
+                return $this->returnApiError($e->getMessage(), 400);
+            }
+
             // Get pagination parameters (defaults to returning all users)
             $perPage = (int)$this->request->query->get('per_page', 0);
 
@@ -394,7 +421,7 @@ class UsersController extends PublicApiController
             if ($perPage === 0) {
                 // Get all users without pagination
                 $pagination = new Pagination(0, PHP_INT_MAX, 1);
-                $result = $this->userManagementService->getUsersList($pagination);
+                $result = $this->userManagementService->getUsersList($pagination, $search, $sort);
                 $users = $result['data'];
 
                 $responseData = [
@@ -413,7 +440,7 @@ class UsersController extends PublicApiController
                 $pagination = new Pagination(0, $perPage, $page);
 
                 // Use the domain service to get users list
-                $result = $this->userManagementService->getUsersList($pagination);
+                $result = $this->userManagementService->getUsersList($pagination, $search, $sort);
                 $users = $result['data'];
                 $totalCount = $result['total_count'];
 

@@ -1680,6 +1680,7 @@ class ComposerStaticInit0ad1039ae44b47b344e495959a2ee847
         'Poweradmin\\Domain\\Model\\CryptoKey' => __DIR__ . '/../..' . '/lib/Domain/Model/CryptoKey.php',
         'Poweradmin\\Domain\\Model\\DnssecAlgorithm' => __DIR__ . '/../..' . '/lib/Domain/Model/DnssecAlgorithm.php',
         'Poweradmin\\Domain\\Model\\DnssecAlgorithmName' => __DIR__ . '/../..' . '/lib/Domain/Model/DnssecAlgorithmName.php',
+        'Poweradmin\\Domain\\Model\\ListSort' => __DIR__ . '/../..' . '/lib/Domain/Model/ListSort.php',
         'Poweradmin\\Domain\\Model\\Locale' => __DIR__ . '/../..' . '/lib/Domain/Model/Locale.php',
         'Poweradmin\\Domain\\Model\\MetadataDefinitions' => __DIR__ . '/../..' . '/lib/Domain/Model/MetadataDefinitions.php',
         'Poweradmin\\Domain\\Model\\Pagination' => __DIR__ . '/../..' . '/lib/Domain/Model/Pagination.php',

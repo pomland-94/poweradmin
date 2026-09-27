@@ -22,6 +22,8 @@
 
 namespace Poweradmin\Domain\Repository;
 
+use Poweradmin\Domain\Model\ListSort;
+
 interface ZoneRepositoryInterface
 {
     public function getDistinctStartingLetters(int $userId, bool $viewOthers): array;
@@ -264,20 +266,23 @@ interface ZoneRepositoryInterface
      *
      * @param int[]|null $zoneIds Optional array of zone IDs to filter
      * @param int|null $userId Optional user ID filter
-     * @param string|null $nameFilter Optional name filter
+     * @param string|null $nameFilter Optional exact name filter
+     * @param string|null $nameContains Optional case-insensitive substring filter on the name
      * @return int Number of matching zones
      */
-    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null): int;
+    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?string $nameContains = null): int;
 
     /**
      * Get all zones with filtering and pagination
      *
      * @param int[]|null $zoneIds Optional array of zone IDs to filter
      * @param int|null $userId Optional user ID filter
-     * @param string|null $nameFilter Optional name filter
+     * @param string|null $nameFilter Optional exact name filter
      * @param int|null $offset Optional pagination offset
      * @param int|null $limit Optional pagination limit
+     * @param string|null $nameContains Optional case-insensitive substring filter on the name
+     * @param ListSort|null $sort Optional sort order (fields: name, type); defaults to name
      * @return array Array of matching zones
      */
-    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null): array;
+    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null, ?string $nameContains = null, ?ListSort $sort = null): array;
 }

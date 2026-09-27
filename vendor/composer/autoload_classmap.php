@@ -1270,6 +1270,7 @@ return array(
     'Poweradmin\\Domain\\Model\\CryptoKey' => $baseDir . '/lib/Domain/Model/CryptoKey.php',
     'Poweradmin\\Domain\\Model\\DnssecAlgorithm' => $baseDir . '/lib/Domain/Model/DnssecAlgorithm.php',
     'Poweradmin\\Domain\\Model\\DnssecAlgorithmName' => $baseDir . '/lib/Domain/Model/DnssecAlgorithmName.php',
+    'Poweradmin\\Domain\\Model\\ListSort' => $baseDir . '/lib/Domain/Model/ListSort.php',
     'Poweradmin\\Domain\\Model\\Locale' => $baseDir . '/lib/Domain/Model/Locale.php',
     'Poweradmin\\Domain\\Model\\MetadataDefinitions' => $baseDir . '/lib/Domain/Model/MetadataDefinitions.php',
     'Poweradmin\\Domain\\Model\\Pagination' => $baseDir . '/lib/Domain/Model/Pagination.php',

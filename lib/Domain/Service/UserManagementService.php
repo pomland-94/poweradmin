@@ -22,6 +22,7 @@
 
 namespace Poweradmin\Domain\Service;
 
+use Poweradmin\Domain\Model\ListSort;
 use Exception;
 use Poweradmin\Domain\Repository\UserGroupRepositoryInterface;
 use Poweradmin\Domain\Repository\UserRepository;
@@ -65,18 +66,22 @@ class UserManagementService
      * Get paginated list of users with their details and permissions
      *
      * @param Pagination $pagination Pagination parameters
+     * @param string|null $search Filter on username, full name, email or description
+     * @param ListSort|null $sort Optional sort order (fields: username, fullname, email)
      * @return array Array with 'data' and 'total_count' keys
      */
-    public function getUsersList(Pagination $pagination): array
+    public function getUsersList(Pagination $pagination, ?string $search = null, ?ListSort $sort = null): array
     {
         $users = $this->userRepository->getUsersList(
             $pagination->getOffset(),
-            $pagination->getLimit()
+            $pagination->getLimit(),
+            $search,
+            $sort
         );
 
         return [
             'data' => $this->profileAssembler->assembleList($users),
-            'total_count' => $this->userRepository->getTotalUserCount()
+            'total_count' => $this->userRepository->getTotalUserCount(null, $search)
         ];
     }
 

@@ -32,6 +32,8 @@
 namespace Poweradmin\Application\Controller\Api\V2;
 
 use Exception;
+use InvalidArgumentException;
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Application\Controller\Api\PublicApiController;
 use Poweradmin\Application\Service\RecordCommentService;
 use Poweradmin\Domain\Service\ApiPermissionService;
@@ -55,6 +57,9 @@ use OpenApi\Attributes as OA;
 
 class ZonesRecordsController extends PublicApiController
 {
+    /** Fields accepted by the `sort` parameter of GET /zones/{id}/records. */
+    private const RECORD_SORT_FIELDS = ['name', 'type', 'content', 'ttl', 'priority'];
+
     private ZoneRepositoryInterface $zoneRepository;
     private RecordRepositoryInterface $recordRepository;
     private RecordManagerInterface $recordManager;
@@ -133,6 +138,28 @@ class ZonesRecordsController extends PublicApiController
         description: 'Filter by record type',
         schema: new OA\Schema(type: 'string', example: 'A')
     )]
+    #[OA\Parameter(
+        name: 'name',
+        in: 'query',
+        description: 'Case-insensitive substring filter on the record name',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'www')
+    )]
+    #[OA\Parameter(
+        name: 'content',
+        in: 'query',
+        description: 'Case-insensitive substring filter on the record content',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: '192.0.2.')
+    )]
+    #[OA\Parameter(
+        name: 'sort',
+        in: 'query',
+        description: 'Sort order: comma-separated fields, each optionally suffixed with :asc or :desc. Allowed fields: name, type, content, ttl, priority. Default: backend order',
+        required: false,
+        schema: new OA\Schema(type: 'string', example: 'type,name')
+    )]
+    #[OA\Response(response: 400, description: 'Invalid sort parameter')]
     #[OA\Response(
         response: 200,
         description: 'Records retrieved successfully',
@@ -172,6 +199,13 @@ class ZonesRecordsController extends PublicApiController
             $userId = $this->getAuthenticatedUserId();
             $zoneId = $this->pathParameters['id'];
             $recordType = $this->request->query->get('type');
+            $nameContains = trim((string)$this->request->query->get('name', ''));
+            $contentContains = trim((string)$this->request->query->get('content', ''));
+            try {
+                $sort = ListSort::fromQuery($this->request->query->get('sort'), self::RECORD_SORT_FIELDS);
+            } catch (InvalidArgumentException $e) {
+                return $this->returnApiError($e->getMessage(), 400);
+            }
 
             if (($scopeError = $this->enforceApiKeyZoneScope((int)$zoneId)) !== null) {
                 return $scopeError;
@@ -211,6 +245,17 @@ class ZonesRecordsController extends PublicApiController
                     'auth' => isset($record['auth']) ? (bool)DbCompat::boolFromDb($record['auth']) : true
                 ];
             }, $validRecords);
+
+            // Records come from either the database or the PowerDNS API depending on the
+            // backend, so substring filters and sorting are applied here to behave the same
+            // for both. They run on the formatted values, i.e. what the client sees.
+            if ($nameContains !== '' || $contentContains !== '') {
+                $formattedRecords = array_filter($formattedRecords, static function (array $record) use ($nameContains, $contentContains): bool {
+                    return ($nameContains === '' || stripos($record['name'], $nameContains) !== false)
+                        && ($contentContains === '' || stripos((string)$record['content'], $contentContains) !== false);
+                });
+            }
+            $formattedRecords = $sort->sortRows($formattedRecords);
 
             return $this->returnApiResponse(['records' => $formattedRecords], true, 'Records retrieved successfully', 200);
         } catch (\Throwable $e) {

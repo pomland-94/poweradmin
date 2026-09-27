@@ -25,6 +25,7 @@ namespace Poweradmin\Infrastructure\Repository;
 use LogicException;
 use PDO;
 use Poweradmin\Application\Service\ZoneSyncService;
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Domain\Model\ZoneType;
 use Poweradmin\Domain\Repository\ZoneRepositoryInterface;
 use Poweradmin\Domain\Service\DnsBackendProvider;
@@ -887,13 +888,13 @@ readonly class ApiZoneRepository implements ZoneRepositoryInterface
         return (int)$stmt->fetchColumn();
     }
 
-    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null): int
+    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?string $nameContains = null): int
     {
         if ($zoneIds !== null && empty($zoneIds)) {
             return 0;
         }
 
-        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter);
+        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter, $nameContains);
         $query = "SELECT COUNT(DISTINCT z.id) FROM zones z WHERE z.zone_name IS NOT NULL"
             . ($conditions === [] ? '' : ' AND ' . implode(' AND ', $conditions));
 
@@ -909,9 +910,10 @@ readonly class ApiZoneRepository implements ZoneRepositoryInterface
      * @param int[]|null $zoneIds Explicit zone-id allowlist, or null for no id restriction
      * @param int|null $userId Owner to filter by, or null for no ownership restriction
      * @param string|null $nameFilter Optional exact zone-name filter
+     * @param string|null $nameContains Optional case-insensitive zone-name substring filter
      * @return array{0: string[], 1: array<string, mixed>} [conditions, bind params]
      */
-    private function buildZoneFilterConditions(?array $zoneIds, ?int $userId, ?string $nameFilter): array
+    private function buildZoneFilterConditions(?array $zoneIds, ?int $userId, ?string $nameFilter, ?string $nameContains = null): array
     {
         $conditions = [];
         $params = [];
@@ -943,22 +945,28 @@ readonly class ApiZoneRepository implements ZoneRepositoryInterface
             $params[':name_filter'] = $nameFilter;
         }
 
+        // LOWER() on both sides: PostgreSQL LIKE is case-sensitive, MySQL's default collation is not.
+        if ($nameContains !== null && trim($nameContains) !== '') {
+            $conditions[] = "LOWER(z.zone_name) LIKE LOWER(:name_contains) ESCAPE '!'";
+            $params[':name_contains'] = '%' . DbCompat::escapeLike(trim($nameContains)) . '%';
+        }
+
         return [$conditions, $params];
     }
 
-    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null): array
+    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null, ?string $nameContains = null, ?ListSort $sort = null): array
     {
         if ($zoneIds !== null && empty($zoneIds)) {
             return [];
         }
 
-        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter);
+        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter, $nameContains);
         $query = "SELECT z.id, z.zone_name as name, z.zone_type as type, z.zone_master as master,
                          COALESCE(z.owner, 0) as owner
                   FROM zones z
                   WHERE z.zone_name IS NOT NULL"
             . ($conditions === [] ? '' : ' AND ' . implode(' AND ', $conditions));
-        $query .= " ORDER BY z.zone_name";
+        $query .= " ORDER BY " . ($sort ?? ListSort::none())->toOrderBy(['name' => 'z.zone_name', 'type' => 'z.zone_type'], 'name');
         if ($limit !== null && $limit > 0) {
             $query .= " LIMIT :limit OFFSET :offset";
         }

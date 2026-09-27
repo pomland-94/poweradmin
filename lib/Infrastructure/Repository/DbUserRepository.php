@@ -22,6 +22,7 @@
 
 namespace Poweradmin\Infrastructure\Repository;
 
+use Poweradmin\Domain\Model\ListSort;
 use PDO;
 use Poweradmin\Domain\Model\User;
 use Poweradmin\Domain\Model\UserId;
@@ -247,10 +248,20 @@ class DbUserRepository implements UserRepository
      *
      * @param int $offset Starting offset for pagination
      * @param int $limit Maximum number of users to return
+     * @param string|null $search Filter on username, full name, email or description
+     * @param ListSort|null $sort Optional sort order (fields: username, fullname, email); defaults to id
      * @return array Array of user data with zone counts
      */
-    public function getUsersList(int $offset, int $limit): array
+    public function getUsersList(int $offset, int $limit, ?string $search = null, ?ListSort $sort = null): array
     {
+        [$searchCondition, $searchBindings] = $this->buildUserSearchFilter($search);
+        $orderBy = ($sort ?? ListSort::none())->toOrderBy([
+            'id' => 'users.id',
+            'username' => 'users.username',
+            'fullname' => 'users.fullname',
+            'email' => 'users.email',
+        ], 'id');
+
         $query = "SELECT users.id AS id,
             users.username AS username,
             users.fullname AS fullname,
@@ -264,6 +275,7 @@ class DbUserRepository implements UserRepository
             LEFT JOIN zones ON users.id = zones.owner
             LEFT JOIN perm_templ ON users.perm_templ = perm_templ.id
                  AND perm_templ.template_type = 'user'
+            WHERE 1=1" . $searchCondition . "
             GROUP BY
             users.id,
             users.username,
@@ -273,12 +285,15 @@ class DbUserRepository implements UserRepository
             users.perm_templ,
             perm_templ.name,
             users.active
-            ORDER BY users.id
+            ORDER BY " . $orderBy . "
             LIMIT :limit OFFSET :offset";
 
         $stmt = $this->db->prepare($query);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        foreach ($searchBindings as $placeholder => $value) {
+            $stmt->bindValue($placeholder, $value, PDO::PARAM_STR);
+        }
         $stmt->execute();
 
         $users = [];

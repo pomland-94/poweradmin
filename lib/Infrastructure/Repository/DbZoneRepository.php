@@ -23,6 +23,7 @@
 namespace Poweradmin\Infrastructure\Repository;
 
 use PDO;
+use Poweradmin\Domain\Model\ListSort;
 use Poweradmin\Domain\Model\ZoneTemplate;
 use Poweradmin\Domain\Repository\ZoneRepositoryInterface;
 use Poweradmin\Domain\Service\DnsBackendProvider;
@@ -1179,7 +1180,7 @@ class DbZoneRepository implements ZoneRepositoryInterface
      * @param int[]|null $zoneIds Array of allowed zone IDs, or null for all zones
      * @return int Count of zones the user can access
      */
-    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null): int
+    public function getZoneCountFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?string $nameContains = null): int
     {
 
         // If empty array, user can't see any zones
@@ -1191,7 +1192,7 @@ class DbZoneRepository implements ZoneRepositoryInterface
 
         // Build the WHERE conditions: ownership (when a user is given) AND an explicit
         // zone-id allowlist (when provided). Both are optional and combine with AND.
-        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter);
+        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter, $nameContains);
 
         if ($conditions === []) {
             $query = "SELECT COUNT(*) FROM $domains_table d";
@@ -1218,9 +1219,10 @@ class DbZoneRepository implements ZoneRepositoryInterface
      * @param int[]|null $zoneIds Explicit zone-id allowlist, or null for no id restriction
      * @param int|null $userId Owner to filter by, or null for no ownership restriction
      * @param string|null $nameFilter Optional exact zone-name filter
+     * @param string|null $nameContains Optional case-insensitive zone-name substring filter
      * @return array{0: string[], 1: array<string, mixed>} [conditions, bind params]
      */
-    private function buildZoneFilterConditions(?array $zoneIds, ?int $userId, ?string $nameFilter): array
+    private function buildZoneFilterConditions(?array $zoneIds, ?int $userId, ?string $nameFilter, ?string $nameContains = null): array
     {
         $conditions = [];
         $params = [];
@@ -1252,6 +1254,12 @@ class DbZoneRepository implements ZoneRepositoryInterface
             $params[':name_filter'] = $nameFilter;
         }
 
+        // LOWER() on both sides: PostgreSQL LIKE is case-sensitive, MySQL's default collation is not.
+        if ($nameContains !== null && trim($nameContains) !== '') {
+            $conditions[] = "LOWER(d.name) LIKE LOWER(:name_contains) ESCAPE '!'";
+            $params[':name_contains'] = '%' . DbCompat::escapeLike(trim($nameContains)) . '%';
+        }
+
         return [$conditions, $params];
     }
 
@@ -1263,9 +1271,11 @@ class DbZoneRepository implements ZoneRepositoryInterface
      * @param string|null $nameFilter Optional zone name filter (exact match)
      * @param int|null $offset Pagination offset
      * @param int|null $limit Pagination limit
+     * @param string|null $nameContains Optional case-insensitive zone name substring filter
+     * @param ListSort|null $sort Optional sort order (fields: name, type); defaults to name
      * @return array Array of zones the user can access
      */
-    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null): array
+    public function getAllZonesFiltered(?array $zoneIds, ?int $userId = null, ?string $nameFilter = null, ?int $offset = null, ?int $limit = null, ?string $nameContains = null, ?ListSort $sort = null): array
     {
 
         // If empty array, user can't see any zones
@@ -1277,7 +1287,7 @@ class DbZoneRepository implements ZoneRepositoryInterface
         $records_table = $this->tableNameService->getTable(PdnsTable::RECORDS);
 
         // Ownership and explicit zone-id allowlist conditions (both optional).
-        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter);
+        [$conditions, $params] = $this->buildZoneFilterConditions($zoneIds, $userId, $nameFilter, $nameContains);
 
         $query = "SELECT d.id, d.name, d.type, d.master,
                          COALESCE(MIN(z.owner), 0) as owner,
@@ -1292,8 +1302,9 @@ class DbZoneRepository implements ZoneRepositoryInterface
 
         // Add GROUP BY and ORDER BY
         // Group only by domain columns to avoid duplicates when zones have multiple owners
+        $orderBy = ($sort ?? ListSort::none())->toOrderBy(['name' => 'd.name', 'type' => 'd.type'], 'name');
         $query .= " GROUP BY d.id, d.name, d.type, d.master
-                    ORDER BY d.name";
+                    ORDER BY " . $orderBy;
 
         // Add pagination only if limit is specified
         if ($limit !== null && $limit > 0) {

@@ -433,6 +433,21 @@ return [
     ],
 
     /**
+     * Metrics Settings
+     *
+     * Prometheus text-format endpoint at /metrics with counts about Poweradmin
+     * itself (zones, DNSSEC-signed zones, users, optionally records). Needs the
+     * API to be enabled. With require_auth the caller needs an API key (or basic
+     * auth) of a user with the server_status_view permission.
+     */
+    'metrics' => [
+        'enabled' => false,                            // Enable the metrics endpoint at /metrics (added in 4.6.0)
+        'require_auth' => true,                        // Require an API key/basic auth with server_status_view (added in 4.6.0)
+        'cache_ttl' => 60,                             // Seconds to reuse computed values via APCu, 0 disables caching (added in 4.6.0)
+        'count_records' => false,                      // Also count records; database backend only, can be slow on large installs (added in 4.6.0)
+    ],
+
+    /**
      * User Agreement Settings
      */
     'user_agreement' => [

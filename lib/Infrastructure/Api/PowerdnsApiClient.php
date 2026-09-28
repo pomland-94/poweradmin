@@ -258,6 +258,32 @@ class PowerdnsApiClient
      * @param bool $withDnssec Match the endpoint a companion list call uses
      * @return array<string, array{kind: string, masters: array<int, string>, catalog: string}>
      */
+    /**
+     * Count the zones PowerDNS serves by kind and how many of them are signed,
+     * from a single zone list request.
+     *
+     * @return array{kinds: array<string, int>, dnssec_signed: int}|null Null when PowerDNS did not answer
+     */
+    public function getZoneCounts(): ?array
+    {
+        $response = $this->requestZoneList(true);
+        if (!$response || $response['responseCode'] !== 200 || !is_array($response['data'])) {
+            return null;
+        }
+
+        $kinds = [];
+        $signed = 0;
+        foreach ($response['data'] as $zoneData) {
+            $kind = strtolower((string)($zoneData['kind'] ?? 'unknown')) ?: 'unknown';
+            $kinds[$kind] = ($kinds[$kind] ?? 0) + 1;
+            if (!empty($zoneData['dnssec'])) {
+                $signed++;
+            }
+        }
+
+        return ['kinds' => $kinds, 'dnssec_signed' => $signed];
+    }
+
     public function getAllZoneKinds(bool $withDnssec = false): array
     {
         $response = $this->requestZoneList($withDnssec);

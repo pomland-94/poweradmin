@@ -890,6 +890,11 @@ ping:
   controller: Poweradmin\Application\Controller\System\PingController::run
   methods: [GET]
 
+metrics:
+  path: /metrics
+  controller: Poweradmin\Application\Controller\Api\MetricsController::run
+  methods: [GET]
+
 # Static Assets
 static_assets:
   path: /{path}

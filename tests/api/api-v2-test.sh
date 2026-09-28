@@ -2134,6 +2134,51 @@ test_zone_dnssec_keys() {
     api_request_v2 "DELETE" "/zones/${zone_id}" "" 204 "Delete DNSSEC key test zone" || true
 }
 
+test_metrics() {
+    print_section "Metrics Endpoint Tests"
+
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" -H "X-API-Key: $API_KEY" --max-time 30 "${API_BASE_URL}/metrics")
+    if [[ "$code" == "404" ]]; then
+        print_info "Metrics endpoint disabled (metrics.enabled = false) - skipping"
+        return 0
+    fi
+
+    local body headers
+    headers=$(mktemp)
+    body=$(curl -s -D "$headers" -H "X-API-Key: $API_KEY" --max-time 30 "${API_BASE_URL}/metrics")
+
+    increment_test
+    if grep -qi '^content-type: text/plain; version=0.0.4' "$headers"; then
+        print_pass "Metrics use the Prometheus text content type"
+    else
+        print_fail "Unexpected content type: $(grep -i '^content-type' "$headers")"
+    fi
+    rm -f "$headers"
+
+    increment_test
+    if echo "$body" | grep -q '^# TYPE poweradmin_info gauge' && echo "$body" | grep -q '^poweradmin_info{version="'; then
+        print_pass "Metrics contain poweradmin_info"
+    else
+        print_fail "poweradmin_info missing"
+    fi
+
+    increment_test
+    if echo "$body" | grep -qE '^poweradmin_users\{active="true"\} [0-9]+$'; then
+        print_pass "Metrics contain the user gauge"
+    else
+        print_fail "poweradmin_users missing"
+    fi
+
+    increment_test
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${API_BASE_URL}/metrics")
+    if [[ "$code" == "401" || "$code" == "200" ]]; then
+        print_pass "Unauthenticated metrics request answers 401 (or 200 with require_auth off): $code"
+    else
+        print_fail "Unexpected status for unauthenticated metrics request: $code"
+    fi
+}
+
 test_users_crud() {
     print_section "Users CRUD API Tests"
 
@@ -3534,6 +3579,7 @@ main() {
     test_zone_metadata
     test_zone_dnssec
     test_server_status
+    test_metrics
     test_zone_dnssec_keys
     test_users_crud
     test_zone_templates
